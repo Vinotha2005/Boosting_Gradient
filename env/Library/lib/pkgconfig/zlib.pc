@@ -1,0 +1,13 @@
+prefix=C:/Boosting_task/env/Library
+exec_prefix=C:/Boosting_task/env/Library
+libdir=C:/Boosting_task/env/Library/lib
+sharedlibdir=C:/Boosting_task/env/Library/lib
+includedir=C:/Boosting_task/env/Library/include
+
+Name: zlib
+Description: zlib compression library
+Version: 1.3.1
+
+Requires:
+Libs: -L${libdir} -L${sharedlibdir} -lz
+Cflags: -I${includedir}
