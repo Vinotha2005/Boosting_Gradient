@@ -6,7 +6,7 @@ This project predicts the price of used cars based on various attributes such as
 The dataset was cleaned, preprocessed, and trained using Gradient Boosting Regressor with GridSearchCV for hyperparameter tuning.
 
 ## App for Car Price Prediction:
-
+https://boostinggradient.streamlit.app/
 
 ## 🧠 Objectives
 
