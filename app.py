@@ -1,65 +1,98 @@
-# ==========================================
-# app.py
-# ==========================================
+# ==================================================
+# app.py — Streamlit Car Price Prediction App
+# ==================================================
 
 import streamlit as st
-import pickle
+import pandas as pd
 import numpy as np
+import pickle
 
-# ===============================
-# Load trained model
-# ===============================
-with open("car_price_model.pkl", "rb") as file:
-    model = pickle.load(file)
+# ==================================================
+# Load model and encoder data
+# ==================================================
+with open("model.pkl", "rb") as f:
+    model_data = pickle.load(f)
 
-st.set_page_config(page_title="🚗 Car Price Prediction App", layout="wide")
+model = model_data["model"]
+encoders = model_data["encoders"]
+feature_names = model_data["features"]
 
-st.title("🚗 Car Price Prediction using Gradient Boosting")
-st.markdown("### Enter the car details below to predict its price")
+# ==================================================
+# Page setup
+# ==================================================
+st.set_page_config(page_title="Car Price Prediction", page_icon="🚗", layout="wide")
+st.title("🚗 Used Car Price Prediction App")
+st.write("Enter or select the car details below to predict its **price** using a trained Gradient Boosting model.")
 
-# ===============================
-# Input fields
-# ===============================
-col1, col2, col3 = st.columns(3)
+# ==================================================
+# Load dataset to extract unique categorical values
+# ==================================================
+df = pd.read_csv("car details v4.csv")
 
-with col1:
-    year = st.number_input("Year", min_value=1990, max_value=2025, value=2018)
-    kilometer = st.number_input("Kilometer Driven", min_value=0, max_value=500000, value=30000)
-    fuel_type = st.number_input("Fuel Type (Encoded)", min_value=0, value=1)
-    transmission = st.number_input("Transmission (Encoded)", min_value=0, value=1)
-    engine = st.number_input("Engine (cc)", min_value=500, max_value=6000, value=2000)
+# Identify categorical and numeric columns
+cat_cols = df.select_dtypes(include=['object']).columns.tolist()
+num_cols = [col for col in feature_names if col not in cat_cols and col != "Price"]
 
-with col2:
-    max_power = st.number_input("Max Power (Encoded)", min_value=0, value=100)
-    max_torque = st.number_input("Max Torque (Encoded)", min_value=0, value=200)
-    drivetrain = st.number_input("Drivetrain (Encoded)", min_value=0, value=1)
-    seating_capacity = st.number_input("Seating Capacity", min_value=2, max_value=10, value=5)
-    fuel_tank_capacity = st.number_input("Fuel Tank Capacity", min_value=20, max_value=100, value=50)
+# ==================================================
+# Input form with user-friendly UI
+# ==================================================
+st.subheader("🔧 Car Feature Inputs")
 
-with col3:
-   with col3:
-    length = st.number_input("Length (mm)", min_value=3000, max_value=6000, value=4500)
-    width = st.number_input("Width (mm)", min_value=1000, max_value=2500, value=1800)
-    height = st.number_input("Height (mm)", min_value=1000, max_value=2000, value=1500)
-    make = st.number_input("Make (Encoded)", min_value=0, value=1)
-    model_col = st.number_input("Model (Encoded)", min_value=0, value=1)
-    location = st.number_input("Location (Encoded)", min_value=0, value=1)
-    color = st.number_input("Color (Encoded)", min_value=0, value=1)
-    owner = st.number_input("Owner (Encoded)", min_value=0, value=1)
-    seller_type = st.number_input("Seller Type (Encoded)", min_value=0, value=1)
+cols = st.columns(3)
+user_input = {}
 
-# ===============================
-# Predict Button
-# ===============================
+for i, col in enumerate(feature_names):
+    with cols[i % 3]:
+        if col in cat_cols:
+            # Dropdown for categorical columns
+            options = sorted(df[col].dropna().astype(str).unique().tolist())
+            selected = st.selectbox(f"{col}", options)
+            user_input[col] = selected
+        elif col == "Year":
+            user_input[col] = st.number_input(f"{col}", min_value=1980, max_value=2025, value=2020)
+        elif col == "Kilometer":
+            user_input[col] = st.number_input(f"{col}", min_value=0, max_value=500000, value=50000)
+        elif col in ["Length", "Width", "Height"]:
+            user_input[col] = st.number_input(f"{col} (mm)", min_value=0.0, value=4000.0, step=10.0)
+        elif col in ["Seating Capacity", "Fuel Tank Capacity"]:
+            user_input[col] = st.number_input(f"{col}", min_value=0.0, value=5.0, step=1.0)
+        else:
+            user_input[col] = st.number_input(f"{col}", value=0.0)
+
+# ==================================================
+# Convert input to DataFrame
+# ==================================================
 if st.button("🔮 Predict Price"):
     try:
-        input_data = np.array([[
-    make, model_col, year, kilometer, fuel_type, transmission,
-    location, color, owner, seller_type, engine, max_power, max_torque,
-    drivetrain, length, width, height, seating_capacity, fuel_tank_capacity
-]])
+        input_df = pd.DataFrame([user_input])
 
-        prediction = model.predict(input_data)[0]
-        st.success(f"💰 Estimated Car Price: ₹ {prediction:,.2f}")
+        # Encode categorical columns
+        for col in encoders.keys():
+            if col in input_df.columns:
+                le = encoders[col]
+                val = input_df[col].iloc[0]
+                if val not in le.classes_:
+                    st.warning(f"⚠️ Unknown value '{val}' for {col}, replacing with 'Unknown'")
+                    le.classes_ = np.append(le.classes_, "Unknown")
+                    input_df[col] = le.transform(["Unknown"])
+                else:
+                    input_df[col] = le.transform([val])
+
+        # Convert numeric columns
+        for col in input_df.columns:
+            if col not in encoders.keys():
+                input_df[col] = pd.to_numeric(input_df[col], errors="coerce").fillna(0)
+
+        # Reorder columns
+        input_df = input_df.reindex(columns=feature_names, fill_value=0)
+
+        # Predict
+        pred = model.predict(input_df)[0]
+
+        st.success(f"💰 Predicted Car Price: ₹ {pred:,.2f}")
+
+        st.write("### 🔍 Input Summary")
+        st.dataframe(input_df)
+
     except Exception as e:
-        st.error(f"❌ Error: {e}")
+        st.error(f"❌ Error during prediction: {e}")
